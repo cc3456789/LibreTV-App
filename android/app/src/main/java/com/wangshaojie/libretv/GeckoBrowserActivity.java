@@ -30,7 +30,7 @@ public class GeckoBrowserActivity extends Activity {
     private TextView status;
     private static final String PREFS = "browser";
     private static final String KEY_URL = "last_url";
-    private static final String DEFAULT_URL = "http://192.168.50.190:8899";
+    private static final String DEFAULT_URL = "http://192.168.50.190:8899/auto-login.html";
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
