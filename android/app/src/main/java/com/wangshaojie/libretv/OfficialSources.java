@@ -24,11 +24,11 @@ public final class OfficialSources {
      * 顺序即优先级，任何一个能通即可完成同步。
      */
     public static final String[] URLS={
-        "https://raw.githubusercontent.com/wangshaojie/LibreTV-App/main/sources/latest.json",
-        "https://fastly.jsdelivr.net/gh/wangshaojie/LibreTV-App@main/sources/latest.json",
-        "https://gcore.jsdelivr.net/gh/wangshaojie/LibreTV-App@main/sources/latest.json",
-        "https://cdn.jsdelivr.net/gh/wangshaojie/LibreTV-App@main/sources/latest.json",
-        "https://ghproxy.net/https://raw.githubusercontent.com/wangshaojie/LibreTV-App/main/sources/latest.json"
+        "https://raw.githubusercontent.com/cc3456789/LibreTV-App/main/sources/latest.json",
+        "https://fastly.jsdelivr.net/gh/cc3456789/LibreTV-App@main/sources/latest.json",
+        "https://gcore.jsdelivr.net/gh/cc3456789/LibreTV-App@main/sources/latest.json",
+        "https://cdn.jsdelivr.net/gh/cc3456789/LibreTV-App@main/sources/latest.json",
+        "https://ghproxy.net/https://raw.githubusercontent.com/cc3456789/LibreTV-App/main/sources/latest.json"
     };
     /** 主地址，供需要单一地址的地方使用。 */
     public static final String URL=URLS[0];
