@@ -7,6 +7,7 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.KeyEvent;
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
@@ -14,11 +15,9 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import org.mozilla.geckoview.GeckoResult;
 import org.mozilla.geckoview.GeckoRuntime;
 import org.mozilla.geckoview.GeckoSession;
 import org.mozilla.geckoview.GeckoView;
-import org.mozilla.geckoview.WebRequestError;
 
 /**
  * 自带内核浏览器：使用 Firefox GeckoView 内核，不依赖系统老 WebView。
@@ -75,8 +74,8 @@ public class GeckoBrowserActivity extends Activity {
         address.setOnEditorActionListener((v, a, e) -> { loadTyped(); return true; });
         bar.addView(address);
         bar.addView(btn("打开", v -> loadTyped()));
-        bar.addView(btn("返回", v -> { if (session!=null && session.canGoBack()) session.goBack(); }));
-        bar.addView(btn("刷新", v -> { if (session!=null) session.reload(); }));
+        bar.addView(btn("主页", v -> loadUrlSafe(DEFAULT_URL)));
+        bar.addView(btn("刷新", v -> loadUrlSafe(address.getText().toString().trim())));
         bar.addView(btn("信息", v -> Toast.makeText(this,"Firefox GeckoView 自带内核 · 不依赖系统 WebView",Toast.LENGTH_LONG).show()));
         root.addView(bar);
 
@@ -98,10 +97,6 @@ public class GeckoBrowserActivity extends Activity {
                 }
                 public void onPageLoadStateChanged(GeckoSession s, boolean isLoading, boolean canGoBack, boolean canGoForward) {
                     if (!isLoading) setStatus("完成", address.getText().toString());
-                }
-                public GeckoResult<Boolean> onLoadError(GeckoSession s, String uri, WebRequestError error) {
-                    setStatus("失败", "错误 " + error.getErrorCode() + " · " + uri);
-                    return null;
                 }
             });
             web.setSession(session);
@@ -147,16 +142,10 @@ public class GeckoBrowserActivity extends Activity {
 
     private void loadUrlSafe(String u) {
         if (session==null) { setStatus("未就绪", "内核尚未启动"); return; }
+        if (!u.startsWith("http://") && !u.startsWith("https://")) u = "http://" + u;
         setStatus("正在打开", u);
         session.loadUri(u);
     }
 
-    @Override public void onBackPressed() {
-        if (session!=null && session.canGoBack()) session.goBack(); else super.onBackPressed();
-    }
-    @Override public boolean onKeyDown(int keyCode, KeyEvent event) {
-        if (keyCode==KeyEvent.KEYCODE_BACK && session!=null && session.canGoBack()) { session.goBack(); return true; }
-        return super.onKeyDown(keyCode, event);
-    }
     private int dp(int v) { return (int)(v * getResources().getDisplayMetrics().density); }
 }
