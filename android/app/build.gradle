@@ -37,6 +37,7 @@ android {
 tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
 
 dependencies {
+    implementation 'org.mozilla.geckoview:geckoview:160.0.20261116130455'
     implementation 'androidx.media3:media3-exoplayer:1.5.1'
     implementation 'androidx.media3:media3-exoplayer-hls:1.5.1'
     implementation 'androidx.media3:media3-exoplayer-dash:1.5.1'
