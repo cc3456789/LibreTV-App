@@ -12,49 +12,52 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
-import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
-/** 通用网络浏览器：可输入任意网址，默认打开 NAS 上的 LibreTV。遥控器友好。 */
+/**
+ * 电视浏览器：可输入任意网址，默认打开 NAS 上的 LibreTV。
+ * 顶部状态栏实时显示 WebView 内核版本、加载状态与错误码，便于在电视上定位问题。
+ */
 public class BrowserActivity extends Activity {
     private WebView web;
     private EditText address;
-    private ProgressBar progress;
-    private TextView title;
+    private TextView status;
     private static final String PREFS = "browser";
     private static final String KEY_URL = "last_url";
     private static final String DEFAULT_URL = "http://192.168.50.190:8899";
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        if (Build.VERSION.SDK_INT >= 19) {
-            getWindow().setFlags(0x01000000, 0x01000000); // FLAG_HARDWARE_ACCELERATED
-        }
+        int pad = dp(10);
 
-        int pad = dp(12);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.rgb(18,18,20));
 
-        // 顶部：标题 + 地址栏 + 按钮
+        // 顶部状态栏（醒目、可换行，用于显示错误码）
+        status = new TextView(this);
+        status.setTextColor(Color.rgb(25,25,25));
+        status.setTextSize(14);
+        status.setBackgroundColor(Color.rgb(220,232,248));
+        status.setPadding(pad, dp(8), pad, dp(8));
+        status.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(status);
+
+        // 地址栏
         LinearLayout bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
-        bar.setPadding(pad, pad, pad, dp(6));
+        bar.setPadding(pad, dp(8), pad, dp(4));
         bar.setGravity(Gravity.CENTER_VERTICAL);
-
-        title = new TextView(this);
-        title.setText("网页浏览");
-        title.setTextColor(Color.WHITE);
-        title.setTextSize(16);
-        title.setMinWidth(dp(70));
-        bar.addView(title);
 
         address = new EditText(this);
         address.setTextColor(Color.WHITE);
@@ -65,48 +68,45 @@ public class BrowserActivity extends Activity {
         address.setBackgroundColor(Color.rgb(40,40,44));
         address.setPadding(dp(10), dp(8), dp(10), dp(8));
         LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        ap.setMargins(dp(8),0,dp(8),0);
+        ap.setMargins(0,0,dp(8),0);
         address.setLayoutParams(ap);
-        final Activity act = this;
-        address.setOnEditorActionListener((v, actionId, event) -> { loadTyped(); return true; });
         address.setOnKeyListener((v, keyCode, event) -> {
-            if (event.getAction()==KeyEvent.ACTION_DOWN && keyCode==KeyEvent.KEYCODE_ENTER) { loadTyped(); return true; }
+            if (event.getAction()==KeyEvent.ACTION_DOWN &&
+                (keyCode==KeyEvent.KEYCODE_ENTER || keyCode==KeyEvent.KEYCODE_DPAD_CENTER || keyCode==KeyEvent.KEYCODE_NUMPAD_ENTER)) {
+                loadTyped();
+                return true;
+            }
             return false;
         });
+        address.setOnEditorActionListener((v, actionId, event) -> { loadTyped(); return true; });
         bar.addView(address);
 
-        Button go = btn("打开");
-        go.setOnClickListener(v -> loadTyped());
-        bar.addView(go);
-        Button back = btn("返回");
-        back.setOnClickListener(v -> { if (web.canGoBack()) web.goBack(); });
-        bar.addView(back);
-        Button reload = btn("刷新");
-        reload.setOnClickListener(v -> web.reload());
-        bar.addView(reload);
+        bar.addView(btn("打开", v -> loadTyped()));
+        bar.addView(btn("返回", v -> { if (web.canGoBack()) web.goBack(); }));
+        bar.addView(btn("刷新", v -> web.reload()));
+        bar.addView(btn("自检", v -> {
+            web.loadUrl("data:text/html;charset=utf-8,<body style='background:%23111;color:%23fff;font-size:96px;text-align:center;padding-top:240px'>WEBVIEW OK</body>");
+            setStatus("自检", "加载测试页…");
+        }));
         root.addView(bar);
 
-        progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
-        progress.setMax(100);
-        progress.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(3)));
-        root.addView(progress);
-
-        // WebView
+        // 网页区域
         web = new WebView(this);
         web.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
-        web.setBackgroundColor(Color.WHITE);
+        web.setBackgroundColor(Color.rgb(238,238,238));
         configureWeb(web);
         root.addView(web);
 
         setContentView(root);
 
+        setStatus("就绪", "内核 " + kernel());
         SharedPreferences sp = getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         String url = sp.getString(KEY_URL, DEFAULT_URL);
         address.setText(url);
-        web.loadUrl(url);
+        loadUrlSafe(url);
     }
 
-    private Button btn(String text) {
+    private Button btn(String text, View.OnClickListener l) {
         Button b = new Button(this);
         b.setText(text);
         b.setTextSize(13);
@@ -116,7 +116,23 @@ public class BrowserActivity extends Activity {
         bp.setMargins(dp(3),0,dp(3),0);
         b.setLayoutParams(bp);
         b.setMinWidth(dp(56));
+        b.setOnClickListener(l);
         return b;
+    }
+
+    private void setStatus(String label, String detail) {
+        status.setText("[" + label + "] " + detail + "\n内核 " + kernel());
+    }
+
+    private String kernel() {
+        try {
+            String ua = web.getSettings().getUserAgentString();
+            int i = ua.indexOf("Chrome/");
+            if (i>=0) { int j=i+7; while(j<ua.length() && (Character.isDigit(ua.charAt(j))||ua.charAt(j)=='.')) j++; return "Chrome " + ua.substring(i+7,j); }
+            int k = ua.indexOf("AppleWebKit/");
+            if (k>=0) { int m=k+12; while(m<ua.length() && (Character.isDigit(ua.charAt(m))||ua.charAt(m)=='.'||ua.charAt(m)=='+')) m++; return "WebKit " + ua.substring(k+12,m); }
+            return "未知";
+        } catch (Exception e) { return "未知"; }
     }
 
     private void configureWeb(WebView w) {
@@ -134,17 +150,10 @@ public class BrowserActivity extends Activity {
         s.setCacheMode(WebSettings.LOAD_NO_CACHE);
         s.setJavaScriptCanOpenWindowsAutomatically(true);
         s.setMediaPlaybackRequiresUserGesture(false);
-        if (Build.VERSION.SDK_INT >= 21) {
-            s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-        }
-        // 桌面 UA，避免电视被识别为移动设备导致页面降级/黑屏
-        String ua = s.getUserAgentString();
-        s.setUserAgentString(ua + " (LibreTV-TV-Browser)");
-
+        if (Build.VERSION.SDK_INT >= 21) s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        s.setUserAgentString(s.getUserAgentString() + " (LibreTV-TV-Browser)");
         CookieManager.getInstance().setAcceptCookie(true);
         if (Build.VERSION.SDK_INT >= 21) CookieManager.getInstance().setAcceptThirdPartyCookies(w, true);
-
-        if (Build.VERSION.SDK_INT >= 19) WebView.setWebContentsDebuggingEnabled(true);
 
         w.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, String url) {
@@ -152,39 +161,49 @@ public class BrowserActivity extends Activity {
                 address.setText(url);
                 return true;
             }
+            @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+                setStatus("加载中", url);
+            }
             @Override public void onPageFinished(WebView view, String url) {
-                title.setText(view.getTitle()!=null && !view.getTitle().isEmpty() ? view.getTitle() : "网页浏览");
-                getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_URL, url).apply();
+                setStatus("完成", view.getTitle()!=null && !view.getTitle().isEmpty() ? view.getTitle() : url);
+            }
+            @Override public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
+                setStatus("失败", "错误 " + errorCode + " " + description + " · " + failingUrl);
+            }
+            @Override public void onReceivedError(WebView view, WebResourceRequest req, WebResourceError err) {
+                if (Build.VERSION.SDK_INT >= 23) setStatus("失败", "错误 " + err.getErrorCode() + " " + err.getDescription() + " · " + req.getUrl());
+            }
+            @Override public void onReceivedHttpError(WebView view, WebResourceRequest req, WebResourceResponse resp) {
+                if (Build.VERSION.SDK_INT >= 21) setStatus("HTTP错误", resp.getStatusCode() + " " + resp.getReasonPhrase() + " · " + req.getUrl());
             }
         });
         w.setWebChromeClient(new WebChromeClient() {
-            @Override public void onProgressChanged(WebView view, int newProgress) {
-                progress.setProgress(newProgress);
-                progress.setVisibility(newProgress==100?View.GONE:View.VISIBLE);
-            }
             @Override public void onReceivedTitle(WebView view, String t) {
-                title.setText(t!=null && !t.isEmpty()? t : "网页浏览");
+                if (t!=null && !t.isEmpty()) setStatus("完成", t);
             }
         });
     }
 
     private void loadTyped() {
         String u = address.getText().toString().trim();
-        if (u.isEmpty()) return;
+        if (u.isEmpty()) { Toast.makeText(this,"请输入网址",Toast.LENGTH_SHORT).show(); return; }
         if (!u.startsWith("http://") && !u.startsWith("https://")) u = "http://" + u;
         address.setText(u);
+        getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_URL, u).apply();
+        loadUrlSafe(u);
+    }
+
+    private void loadUrlSafe(String u) {
+        setStatus("正在打开", u);
         web.loadUrl(u);
     }
 
     @Override public void onBackPressed() {
-        if (web.canGoBack()) web.goBack();
-        else super.onBackPressed();
+        if (web.canGoBack()) web.goBack(); else super.onBackPressed();
     }
-
     @Override public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (keyCode==KeyEvent.KEYCODE_BACK && web.canGoBack()) { web.goBack(); return true; }
         return super.onKeyDown(keyCode, event);
     }
-
     private int dp(int v) { return (int)(v * getResources().getDisplayMetrics().density); }
 }
